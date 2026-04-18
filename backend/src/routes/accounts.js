@@ -1,0 +1,10 @@
+const express = require('express');
+const r = express.Router();
+const c = require('../controllers/accountController');
+const auth = require('../middleware/auth');
+r.use(auth);
+r.get('/balance', c.getBalance);
+r.get('/verify/:iban', c.verifyIban);
+r.post('/freeze-card', c.toggleCardFreeze);
+r.post('/savings-transfer', c.transferToSavings);
+module.exports = r;
