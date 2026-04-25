@@ -1,4 +1,5 @@
 import { $, fmtDate } from '../../utils/format';
+import { generateTransactionPDF } from '../../utils/generateReceipt';
 
 const CATEGORY_COLORS = {
   food: '#f59e0b', travel: '#38bdf8', health: '#34d399',
@@ -14,6 +15,11 @@ const TxItem = ({ tx }) => {
   const name = isSent ? tx.receiver_name : tx.sender_name;
   const avatar = isSent ? tx.receiver_avatar : tx.sender_avatar;
   const catColor = CATEGORY_COLORS[tx.category] || 'var(--teal)';
+
+  const handleDownloadPDF = (e) => {
+    e.stopPropagation();
+    generateTransactionPDF(tx);
+  };
 
   return (
     <div className="tx-item">
@@ -33,6 +39,20 @@ const TxItem = ({ tx }) => {
         </div>
         <span className={`tx-cat ${tx.status}`}>{tx.status}</span>
       </div>
+      <button
+        className="tx-pdf-btn"
+        onClick={handleDownloadPDF}
+        title="Download PDF receipt"
+        id={`pdf-btn-${tx.id}`}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="12" y1="18" x2="12" y2="12" />
+          <polyline points="9 15 12 18 15 15" />
+        </svg>
+        <span>PDF</span>
+      </button>
     </div>
   );
 };

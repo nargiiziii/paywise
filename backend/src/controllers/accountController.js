@@ -7,6 +7,7 @@ exports.getBalance = async (req, res) => {
     const a = r.rows[0];
     res.json({
       balance: parseFloat(a.balance),
+      balances: a.balances || { USD: parseFloat(a.balance), AZN: 0, BTC: 0 },
       savings_balance: parseFloat(a.savings_balance),
       iban: a.iban,
       account_number: a.account_number,
@@ -74,10 +75,20 @@ exports.transferToSavings = async (req, res) => {
 
     if (direction === 'to_savings') {
       if (parseFloat(a.balance) < amt) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Insufficient balance' }); }
-      await client.query('UPDATE accounts SET balance=balance-$1, savings_balance=savings_balance+$1 WHERE id=$2', [amt, a.id]);
+      await client.query(`
+        UPDATE accounts SET 
+          balance = balance - $1, 
+          savings_balance = savings_balance + $1,
+          balances = balances || jsonb_build_object('USD', (balances->>'USD')::decimal - $1)
+        WHERE id = $2`, [amt, a.id]);
     } else {
       if (parseFloat(a.savings_balance) < amt) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Insufficient savings' }); }
-      await client.query('UPDATE accounts SET savings_balance=savings_balance-$1, balance=balance+$1 WHERE id=$2', [amt, a.id]);
+      await client.query(`
+        UPDATE accounts SET 
+          savings_balance = savings_balance - $1, 
+          balance = balance + $1,
+          balances = balances || jsonb_build_object('USD', (balances->>'USD')::decimal + $1)
+        WHERE id = $2`, [amt, a.id]);
     }
     await client.query('COMMIT');
 

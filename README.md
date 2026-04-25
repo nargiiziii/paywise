@@ -29,6 +29,47 @@
 - Full-text search by name or note
 - Paginated results (15 per page)
 
+### PDF Transaction Receipts
+- One-click PDF receipt download for any transaction
+- Branded document with PayWise logo and dark jade theme
+- Includes sender and receiver full names and IBAN numbers
+- Transaction amount, fee, date/time, category, and reference
+- Unique 32-character verification hash for receipt authenticity
+- Direction indicator (Outgoing / Incoming transfer)
+- Built with **jsPDF** on the frontend (no server-side rendering needed)
+- Auto-generated filename: `PayWise_Receipt_{REF}_{DATE}.pdf`
+
+### Smart Balance Forecast (Predictive Analytics)
+- Uses historical spending patterns to project future balances
+- Calculates average daily spending over a 90-day rolling window
+- Predicts account balance for the end of the current month
+- Visual progress indicator showing current vs. projected depletion
+- Real-time updates based on latest transaction data
+- Built with custom analytical logic on the Node.js backend
+
+### Disposable Virtual Cards
+- Generate one-time-use virtual card numbers with labels (e.g. "Netflix", "Amazon")
+- **Luhn Algorithm** for cryptographically valid card numbers (same standard as real banks)
+- **SHA-256 hashed CVV** — never stored in plain text
+- Cards automatically **self-destruct after first charge** — no replay attacks possible
+- 24-hour expiry window for unused cards (max 5 active cards per user)
+- Status tracking: `active`, `used`, `expired`
+
+### Multi-Currency & Crypto Exchange
+- **Triple Asset Support**: Seamlessly manage and exchange between **USD**, **AZN**, and **BTC** (Bitcoin).
+- **Live Rate Service**: Background background workers poll external APIs (**ExchangeRate-API** for fiat, **CoinGecko** for crypto) every 10 minutes to maintain a local high-speed cache of rates.
+- **Precision Engineering**: Uses `big.js` on the backend to handle floating-point arithmetic with up to 8 decimal places, ensuring zero loss of value during crypto conversions.
+- **Atomic Transactions**: All exchanges utilize SQL `BEGIN/COMMIT` transactions to ensure account balances remain consistent even in case of network failures.
+- **Interactive UI**:
+  - **Animated Tickers**: Real-time balance updates using interpolation for smooth value transitions.
+  - **Portfolio Aggregation**: Automatic calculation of total portfolio value in a base currency (AZN).
+  - **Live Rates Board**: Quick-view dashboard for tracking global currency fluctuations.
+- **Purpose**: Enables users to hedge against inflation with Bitcoin, manage local expenses in AZN, and handle international transactions in USD within a single unified wallet.
+
+- Holographic card UI with chip design, reveal/hide toggle, and clipboard copy
+- Charge simulation modal to test the self-destruct mechanism
+- Full transaction history for all virtual card charges
+
 ### Notifications
 - Real-time notification center with unread count
 - Types: success, security, warning, info

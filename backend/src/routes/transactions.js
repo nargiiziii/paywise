@@ -6,5 +6,6 @@ r.use(auth);
 r.get('/', c.getTransactions);
 r.get('/recent', c.getRecent);
 r.get('/stats', c.getStats);
+r.get('/forecast', c.getForecast);
 r.post('/transfer', c.transfer);
 module.exports = r;

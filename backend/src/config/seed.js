@@ -28,7 +28,26 @@ async function seed() {
   try {
     console.log('\n🌱 PayWise Seeder v2.0 starting...\n');
 
+    // Ensure virtual_cards table exists with correct schema
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS virtual_cards (
+        id            SERIAL PRIMARY KEY,
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        account_id    INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        card_number   VARCHAR(19) NOT NULL UNIQUE,
+        cvv           VARCHAR(64) NOT NULL,
+        expiry_month  CHAR(2) NOT NULL,
+        expiry_year   CHAR(4) NOT NULL,
+        label         VARCHAR(60),
+        status        VARCHAR(10) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'used', 'expired')),
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        used_at       TIMESTAMPTZ,
+        expires_at    TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '24 hours'
+      );
+    `);
+
     await client.query('TRUNCATE activity_log, notifications, beneficiaries, savings_goals, transactions, accounts, users RESTART IDENTITY CASCADE');
+
 
     const password = await bcrypt.hash('password123', 12);
 
@@ -54,10 +73,11 @@ async function seed() {
       users.push(ur.rows[0]);
 
       const acctNum = `PW${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+      const balances = JSON.stringify({ USD: u.balance, AZN: 0, BTC: 0 });
       const ar = await client.query(
-        `INSERT INTO accounts (user_id, iban, account_number, balance, savings_balance, currency, account_type, card_number, card_expiry, card_cvv, spending_limit)
-         VALUES ($1,$2,$3,$4,$5,'USD','checking',$6,$7,$8,15000.00) RETURNING *`,
-        [ur.rows[0].id, genIBAN(), acctNum, u.balance, u.savings,
+        `INSERT INTO accounts (user_id, iban, account_number, balance, balances, savings_balance, currency, account_type, card_number, card_expiry, card_cvv, spending_limit)
+         VALUES ($1,$2,$3,$4,$5,$6,'USD','checking',$7,$8,$9,15000.00) RETURNING *`,
+        [ur.rows[0].id, genIBAN(), acctNum, u.balance, balances, u.savings,
          genCardNumber(),
          `${Math.floor(1+Math.random()*12).toString().padStart(2,'0')}/${(new Date().getFullYear()+3).toString().slice(2)}`,
          Math.floor(100 + Math.random() * 900).toString()]

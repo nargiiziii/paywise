@@ -10,7 +10,7 @@ const fullUser = async (userId) => {
   const r = await pool.query(
     `SELECT u.id, u.name, u.email, u.avatar, u.phone, u.address, u.occupation,
             u.is_verified, u.two_fa_enabled, u.theme, u.created_at, u.last_login,
-            a.id as account_id, a.iban, a.account_number, a.balance, a.savings_balance,
+            a.id as account_id, a.iban, a.account_number, a.balance, a.balances, a.savings_balance,
             a.currency, a.account_type, a.card_number, a.card_expiry, a.card_frozen,
             a.spending_limit, a.monthly_spent
      FROM users u LEFT JOIN accounts a ON a.user_id = u.id WHERE u.id = $1`, [userId]
@@ -24,7 +24,9 @@ const fullUser = async (userId) => {
     theme: d.theme, created_at: d.created_at, last_login: d.last_login,
     account: {
       id: d.account_id, iban: d.iban, account_number: d.account_number,
-      balance: parseFloat(d.balance || 0), savings_balance: parseFloat(d.savings_balance || 0),
+      balance: parseFloat(d.balance || 0),
+      balances: d.balances || { USD: parseFloat(d.balance || 0), AZN: 0, BTC: 0 },
+      savings_balance: parseFloat(d.savings_balance || 0),
       currency: d.currency, account_type: d.account_type,
       card_number: d.card_number, card_expiry: d.card_expiry,
       card_frozen: d.card_frozen, spending_limit: parseFloat(d.spending_limit || 0),
@@ -64,10 +66,11 @@ exports.register = async (req, res) => {
     const expMo = Math.floor(1+Math.random()*12).toString().padStart(2,'0');
     const expYr = (new Date().getFullYear()+3).toString().slice(2);
 
+    const balances = JSON.stringify({ USD: 1000.00, AZN: 0, BTC: 0 });
     await client.query(
-      `INSERT INTO accounts (user_id, iban, account_number, balance, savings_balance, card_number, card_expiry, card_cvv, spending_limit)
-       VALUES ($1,$2,$3,1000.00,0.00,$4,$5,$6,10000.00)`,
-      [userId, iban, acctNum, cardGroups, `${expMo}/${expYr}`, Math.floor(100+Math.random()*900).toString()]
+      `INSERT INTO accounts (user_id, iban, account_number, balance, balances, savings_balance, card_number, card_expiry, card_cvv, spending_limit)
+       VALUES ($1,$2,$3,1000.00,$4,0.00,$5,$6,$7,10000.00)`,
+      [userId, iban, acctNum, balances, cardGroups, `${expMo}/${expYr}`, Math.floor(100+Math.random()*900).toString()]
     );
 
     // Welcome notification
@@ -141,6 +144,7 @@ exports.updateProfile = async (req, res) => {
     if (phone !== undefined) { sets.push(`phone=$${sets.length+1}`); vals.push(phone); }
     if (address !== undefined) { sets.push(`address=$${sets.length+1}`); vals.push(address); }
     if (occupation !== undefined) { sets.push(`occupation=$${sets.length+1}`); vals.push(occupation); }
+    if (req.body.theme !== undefined) { sets.push(`theme=$${sets.length+1}`); vals.push(req.body.theme); }
 
     if (newPassword) {
       if (!currentPassword) return res.status(400).json({ error: 'Current password required' });

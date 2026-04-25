@@ -1,12 +1,15 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import AppLayout from './pages/AppLayout';
 import Dashboard from './components/dashboard/Dashboard';
 import Transfer from './components/transfer/Transfer';
 import History from './components/history/History';
 import Savings from './components/cards/Savings';
+import VirtualCards from './components/cards/VirtualCards';
+import Exchange from './components/exchange/Exchange';
 import Cards from './components/cards/Cards';
 import Notifications from './components/notifications/Notifications';
 import Profile from './components/auth/Profile';
@@ -17,7 +20,8 @@ import './styles/global.css';
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
         <Toaster
           position="top-right"
           toastOptions={{
@@ -42,12 +46,15 @@ export default function App() {
             <Route path="history" element={<History />} />
             <Route path="savings" element={<Savings />} />
             <Route path="cards" element={<Cards />} />
+            <Route path="virtual-cards" element={<VirtualCards />} />
+            <Route path="exchange" element={<Exchange />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="profile" element={<Profile />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </ThemeProvider>
     </AuthProvider>
   );
 }

@@ -1,11 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import TxItem from '../common/TxItem';
 import api from '../../utils/api';
 import { $, fmtIBAN } from '../../utils/format';
+
+const CURRENCIES = [
+  { code: 'USD', name: 'US Dollar',         symbol: '$',  flag: '🇺🇸',
+    color: '#3b82f6', glow: 'rgba(59,130,246,0.1)',
+    bg: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' },
+  { code: 'AZN', name: 'Azerbaijani Manat', symbol: '₼', flag: '🇦🇿',
+    color: '#10b981', glow: 'rgba(16,185,129,0.1)',
+    bg: 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)' },
+  { code: 'BTC', name: 'Bitcoin',            symbol: '₿', flag: '₿',
+    color: '#f59e0b', glow: 'rgba(245,158,11,0.1)',
+    bg: 'linear-gradient(135deg, #451a03 0%, #2a0e00 100%)' },
+];
+
+function fmtBal(val, code) {
+  if (code === 'BTC') return Number(val || 0).toFixed(8);
+  return Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 const ChartTip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -19,38 +37,152 @@ const ChartTip = ({ active, payload, label }) => {
   );
 };
 
-const Dashboard = () => {
-  const { user, updateBalance } = useAuth();
-  const navigate = useNavigate();
-  const [recent, setRecent] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+// Horizontal balance card carousel
+const BalanceSlider = ({ balances, rates }) => {
+  const { user } = useAuth();
+  const { theme } = useTheme();
+  const [active, setActive] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startX = useRef(0);
   const [copied, setCopied] = useState(false);
-  const [showCard, setShowCard] = useState(false);
 
-  useEffect(() => {
-    Promise.all([api.get('/transactions/recent'), api.get('/transactions/stats')])
-      .then(([tx, st]) => { setRecent(tx.data); setStats(st.data); })
-      .catch(() => toast.error('Failed to load data'))
-      .finally(() => setLoading(false));
-  }, []);
+  const iban = user?.account?.iban || 'AZ00PAYW0000000000000000';
+
+  // Calculate total AZN value
+  const totalAZN = CURRENCIES.reduce((sum, c) => {
+    const bal = balances?.[c.code] || 0;
+    const rate = rates?.[c.code]?.['AZN'] || (c.code === 'AZN' ? 1 : 0);
+    return sum + bal * rate;
+  }, 0);
+
+  const onPointerDown = (e) => { setDragging(false); startX.current = e.clientX; };
+  const onPointerUp = (e) => {
+    const dx = e.clientX - startX.current;
+    if (Math.abs(dx) > 40) setActive(prev => dx < 0 ? Math.min(CURRENCIES.length - 1, prev + 1) : Math.max(0, prev - 1));
+  };
 
   const copyIBAN = () => {
-    navigator.clipboard.writeText(user?.account?.iban || '');
+    navigator.clipboard.writeText(iban);
     setCopied(true);
     toast.success('IBAN copied!');
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const balance = user?.account?.balance || 0;
-  const savings = user?.account?.savings_balance || 0;
-  const iban = user?.account?.iban || '';
+  const cur = CURRENCIES[active];
+  const bal = balances?.[cur.code] || 0;
+
+  const cardBg = theme === 'light' 
+    ? `linear-gradient(135deg, ${cur.color} 0%, ${cur.color}cc 100%)` 
+    : cur.bg;
+
+  return (
+    <div className="balance-slider-wrap">
+      {/* Total AZN */}
+      {rates && (
+        <div className="total-azn-strip">
+          <span className="total-azn-label">Total Portfolio</span>
+          <span className="total-azn-val">₼ {totalAZN.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        </div>
+      )}
+
+      {/* Card */}
+      <div
+        className="bal-card"
+        style={{ 
+          background: cardBg, 
+          boxShadow: theme === 'light' ? '0 15px 35px rgba(0,0,0,0.15)' : '0 15px 40px rgba(0,0,0,0.4)',
+          border: theme === 'light' ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.08)'
+        }}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+      >
+
+        <div className="bal-card-top">
+          <div className="bal-card-flag">{cur.flag}</div>
+          <div className="bal-card-name">{cur.name}</div>
+        </div>
+
+        <div className="bal-card-amount">
+          <span className="bal-card-sym" style={{ color: cur.color }}>{cur.symbol}</span>
+          <span className="bal-card-num">{fmtBal(bal, cur.code)}</span>
+        </div>
+
+        <div className="bal-card-footer">
+          <div className="bal-card-iban" onClick={copyIBAN}>
+            <span className="bal-card-iban-label">IBAN</span>
+            <span className="bal-card-iban-num">{fmtIBAN(iban)}</span>
+            <span className="bal-card-iban-copy">{copied ? '✓' : '⎘'}</span>
+          </div>
+          <div className="bal-card-savings">
+            <span className="bal-card-iban-label">Savings</span>
+            <span className="bal-card-iban-num">{$(user?.account?.savings_balance || 0)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Dots */}
+      <div className="slider-dots">
+        {CURRENCIES.map((c, i) => (
+          <button
+            key={c.code}
+            className={`slider-dot ${i === active ? 'active' : ''}`}
+            onClick={() => setActive(i)}
+            style={{ background: i === active ? c.color : undefined }}
+          />
+        ))}
+      </div>
+
+      {/* Mini wallet pills */}
+      <div className="mini-wallets">
+        {CURRENCIES.map((c, i) => (
+          <button
+            key={c.code}
+            className={`mini-wallet ${i === active ? 'active' : ''}`}
+            onClick={() => setActive(i)}
+            style={{ borderColor: i === active ? c.color : undefined, color: i === active ? c.color : undefined }}
+          >
+            {c.flag} {c.code}
+            <span className="mini-wallet-bal"> {fmtBal(balances?.[c.code] || 0, c.code)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const Dashboard = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [recent, setRecent] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [forecast, setForecast] = useState(null);
+  const [rates, setRates] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/transactions/recent'),
+      api.get('/transactions/stats'),
+      api.get('/transactions/forecast'),
+      api.get('/exchange/rates'),
+    ])
+      .then(([tx, st, fc, rt]) => {
+        setRecent(tx.data);
+        setStats(st.data);
+        setForecast(fc.data);
+        setRates(rt.data.rates);
+      })
+      .catch(() => toast.error('Failed to load data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const balances = user?.account?.balances || { USD: user?.account?.balance || 0, AZN: 0, BTC: 0 };
 
   const quickActions = [
-    { icon: '↗', label: 'Send Money', to: '/transfer', color: 'var(--teal-dim)', iconColor: 'var(--teal)' },
-    { icon: '📊', label: 'Analytics', to: '/history', color: 'var(--amber-dim)', iconColor: 'var(--amber)' },
-    { icon: '🪙', label: 'Savings', to: '/savings', color: 'var(--blue-dim)', iconColor: 'var(--blue)' },
-    { icon: '💳', label: 'My Card', to: '/cards', color: 'var(--green-dim)', iconColor: 'var(--green)' },
+    { icon: '↗', label: 'Send Money',  to: '/transfer',      color: 'var(--teal-dim)',  iconColor: 'var(--teal)'  },
+    { icon: '💱', label: 'Exchange',   to: '/exchange',      color: 'var(--amber-dim)', iconColor: 'var(--amber)' },
+    { icon: '🪙', label: 'Savings',    to: '/savings',       color: 'var(--blue-dim)',  iconColor: 'var(--blue)'  },
+    { icon: '🔐', label: 'V-Cards',    to: '/virtual-cards', color: 'var(--green-dim)', iconColor: 'var(--green)' },
   ];
 
   return (
@@ -60,28 +192,10 @@ const Dashboard = () => {
         <p className="page-sub">Here's your financial overview for today</p>
       </div>
 
-      {/* Top row: Balance + Stats */}
-      <div className="grid-2" style={{ marginBottom: 20 }}>
-        {/* Balance Hero */}
-        <div className="balance-hero">
-          <div className="balance-tag">Available Balance</div>
-          <div className="balance-num">
-            <span className="currency-sym">$</span>
-            {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="balance-savings-strip">
-            <span style={{ fontSize: 16 }}>🪙</span>
-            <span className="lbl">Savings vault</span>
-            <span className="val">{$(savings)}</span>
-          </div>
-          <div className="iban-row" onClick={copyIBAN} title="Click to copy IBAN">
-            <span style={{ fontSize: 11, color: 'var(--text-2)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>IBAN</span>
-            <span className="iban-text">{fmtIBAN(iban)}</span>
-            <button className="iban-copy">{copied ? '✓ Copied' : 'Copy'}</button>
-          </div>
-        </div>
+      {/* Balance Slider + Stats */}
+      <div className="grid-2" style={{ marginBottom: 20, alignItems: 'start' }}>
+        <BalanceSlider balances={balances} rates={rates} />
 
-        {/* Stats column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="stat-card stagger-1">
             <div className="stat-icon green">↙</div>
@@ -89,11 +203,34 @@ const Dashboard = () => {
             <div className="stat-lbl">Total Received</div>
             <div className="stat-delta up">↑ {stats?.totals?.received_count || 0} transactions</div>
           </div>
-          <div className="stat-card stagger-2">
-            <div className="stat-icon red">↗</div>
-            <div className="stat-val" style={{ color: 'var(--red)' }}>{$(stats?.totals?.total_sent || 0)}</div>
-            <div className="stat-lbl">Total Sent</div>
-            <div className="stat-delta down">↓ {stats?.totals?.sent_count || 0} transactions</div>
+
+          {/* Smart Forecast */}
+          <div className="forecast-card stagger-2">
+            <div className="forecast-header">
+              <span className="forecast-title">Smart Forecast</span>
+            </div>
+            <div className="forecast-body">
+              <div className="forecast-row">
+                <span className="lbl">Avg. Daily Spending</span>
+                <span className="val">{$(forecast?.avgDailySpend || 0)}</span>
+              </div>
+              <div className="forecast-main">
+                <div className="lbl">Estimated Balance ({forecast?.monthName} {forecast?.lastDay})</div>
+                <div className="val">{$(forecast?.predictedBalance || 0)}</div>
+              </div>
+              <div className="forecast-progress">
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${Math.min(100, (forecast?.predictedBalance / (forecast?.currentBalance || 1)) * 100)}%` }}
+                  />
+                </div>
+                <div className="progress-labels">
+                  <span>Current</span>
+                  <span>Predicted</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -112,23 +249,21 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Chart + Categories */}
+      {/* Charts */}
       <div className="grid-2" style={{ marginBottom: 20 }}>
         <div className="card">
-          <div className="sec-head">
-            <span className="sec-title">Activity (6 months)</span>
-          </div>
+          <div className="sec-head"><span className="sec-title">Activity (6 months)</span></div>
           {stats?.monthly?.length > 0 ? (
             <div className="chart-wrap">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={stats.monthly} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="grRecv" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#00e5a0" stopOpacity={0.25} />
+                      <stop offset="5%"  stopColor="#00e5a0" stopOpacity={0.25} />
                       <stop offset="95%" stopColor="#00e5a0" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="grSent" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f5a623" stopOpacity={0.20} />
+                      <stop offset="5%"  stopColor="#f5a623" stopOpacity={0.20} />
                       <stop offset="95%" stopColor="#f5a623" stopOpacity={0} />
                     </linearGradient>
                   </defs>
@@ -136,13 +271,11 @@ const Dashboard = () => {
                   <YAxis tick={{ fill: 'var(--text-2)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                   <Tooltip content={<ChartTip />} />
                   <Area type="monotone" dataKey="received" name="Received" stroke="#00e5a0" strokeWidth={2} fill="url(#grRecv)" />
-                  <Area type="monotone" dataKey="sent" name="Sent" stroke="#f5a623" strokeWidth={2} fill="url(#grSent)" />
+                  <Area type="monotone" dataKey="sent"     name="Sent"     stroke="#f5a623" strokeWidth={2} fill="url(#grSent)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          ) : (
-            <div className="empty"><div className="empty-icon">📊</div><div>No data yet</div></div>
-          )}
+          ) : <div className="empty"><div className="empty-icon">📊</div><div>No data yet</div></div>}
         </div>
 
         <div className="card">
@@ -158,13 +291,11 @@ const Dashboard = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          ) : (
-            <div className="empty"><div className="empty-icon">🗂</div><div>No categories yet</div></div>
-          )}
+          ) : <div className="empty"><div className="empty-icon">🗂</div><div>No categories yet</div></div>}
         </div>
       </div>
 
-      {/* Recent Transactions */}
+      {/* Recent */}
       <div className="card">
         <div className="sec-head">
           <span className="sec-title">Recent Transactions</span>
@@ -175,9 +306,7 @@ const Dashboard = () => {
             {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 68 }} />)}
           </div>
         ) : recent.length > 0 ? (
-          <div className="tx-list">
-            {recent.map(tx => <TxItem key={tx.id} tx={tx} />)}
-          </div>
+          <div className="tx-list">{recent.map(tx => <TxItem key={tx.id} tx={tx} />)}</div>
         ) : (
           <div className="empty">
             <div className="empty-icon">💸</div>

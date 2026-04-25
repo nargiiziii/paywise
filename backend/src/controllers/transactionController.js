@@ -96,8 +96,21 @@ exports.transfer = async (req, res) => {
 
     const fee = amt >= 500 ? 0.5 : 0;
 
-    await client.query('UPDATE accounts SET balance=balance-$1, monthly_spent=monthly_spent+$1 WHERE id=$2', [amt + fee, sender.id]);
-    await client.query('UPDATE accounts SET balance=balance+$1 WHERE id=$2', [amt, receiver.id]);
+    await client.query(
+      `UPDATE accounts SET 
+        balance = balance - $1, 
+        monthly_spent = monthly_spent + $1,
+        balances = balances || jsonb_build_object('USD', (balances->>'USD')::decimal - $1)
+       WHERE id = $2`, 
+      [amt + fee, sender.id]
+    );
+    await client.query(
+      `UPDATE accounts SET 
+        balance = balance + $1,
+        balances = balances || jsonb_build_object('USD', (balances->>'USD')::decimal + $1)
+       WHERE id = $2`, 
+      [amt, receiver.id]
+    );
 
     const ref = genRef();
     const txR = await client.query(
@@ -204,3 +217,58 @@ exports.getStats = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
+
+/**
+ * Predictive Analytics: Forecast balance at end of month
+ */
+exports.getForecast = async (req, res) => {
+  try {
+    const accountId = await getAccountId(req.user.userId);
+    if (!accountId) return res.status(404).json({ error: 'Account not found' });
+
+    // 1. Get total spend in last 90 days
+    const spendR = await pool.query(
+      `SELECT SUM(amount) as total_spent, 
+              MIN(created_at) as first_tx_date
+       FROM transactions 
+       WHERE sender_account_id = $1 
+         AND status = 'completed' 
+         AND created_at >= NOW() - INTERVAL '90 days'`,
+      [accountId]
+    );
+
+    const totalSpent = parseFloat(spendR.rows[0].total_spent || 0);
+    const firstTxDate = spendR.rows[0].first_tx_date ? new Date(spendR.rows[0].first_tx_date) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    
+    // Calculate actual days in range (max 90)
+    const now = new Date();
+    const diffTime = Math.abs(now - firstTxDate);
+    const actualDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    const avgDailySpend = totalSpent / actualDays;
+
+    // 2. Calculate days left in month
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const daysLeft = Math.max(0, lastDayOfMonth.getDate() - now.getDate());
+
+    // 3. Get current balance
+    const balanceR = await pool.query('SELECT balance FROM accounts WHERE id = $1', [accountId]);
+    const currentBalance = parseFloat(balanceR.rows[0].balance);
+
+    const predictedSpend = avgDailySpend * daysLeft;
+    const predictedBalance = Math.max(0, currentBalance - predictedSpend);
+
+    res.json({
+      currentBalance,
+      avgDailySpend,
+      daysLeft,
+      predictedSpend,
+      predictedBalance,
+      monthName: now.toLocaleString('en-US', { month: 'long' }),
+      lastDay: lastDayOfMonth.getDate()
+    });
+  } catch (err) {
+    console.error('Forecast:', err);
+    res.status(500).json({ error: 'Forecast failed' });
+  }
+};
+

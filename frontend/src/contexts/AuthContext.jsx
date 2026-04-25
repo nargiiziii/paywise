@@ -49,10 +49,10 @@ export const AuthProvider = ({ children }) => {
     setUser(prev => ({ ...prev, account: { ...prev.account, card_frozen: frozen } }));
   };
 
-  const refresh = loadUser;
+  const refreshUser = loadUser;
 
   return (
-    <Ctx.Provider value={{ user, loading, login, register, logout, updateBalance, updateCardFreeze, refresh }}>
+    <Ctx.Provider value={{ user, loading, login, register, logout, updateBalance, updateCardFreeze, refreshUser }}>
       {children}
     </Ctx.Provider>
   );

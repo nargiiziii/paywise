@@ -76,7 +76,7 @@ const Savings = () => {
       </div>
 
       {/* Savings balance */}
-      <div className="card" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 20, background: 'linear-gradient(135deg, #0e2a20, #071e1a)' }}>
+      <div className="card savings-hero" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 20 }}>
         <div style={{ fontSize: 48 }}>🪙</div>
         <div>
           <div style={{ fontSize: 11, color: 'var(--text-2)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>Savings Vault</div>
